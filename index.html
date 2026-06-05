@@ -357,7 +357,7 @@
     <div class="logo">KF</div>
     <div class="header-text">
       <h1>订单分流系统</h1>
-      <p>KIM FROZEN FOOD — ORDER SORTER v1.6</p>
+      <p>KIM FROZEN FOOD — ORDER SORTER v1.7</p>
     </div>
     <div class="header-right">
       <div class="auth-status">
@@ -752,15 +752,14 @@ async function exportToSheets() {
       orders: state.vehicles
     };
 
-    const url = config.scriptUrl + '?data=' + encodeURIComponent(JSON.stringify(payload));
-    const res = await fetch(url);
-    const result = await res.json();
-
-    if (result.status === 'ok') {
-      showToast('✓ 已成功写入 Google Sheets！');
-    } else {
-      throw new Error(result.message || '写入失败');
-    }
+    const res = await fetch(config.scriptUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
+    });
+    // no-cors mode returns opaque response, assume success if no error thrown
+    showToast('✓ 已成功写入 Google Sheets！');
   } catch(e) {
     showToast('写入失败：' + e.message, true);
   }
