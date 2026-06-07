@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>订单分流系统</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
 
@@ -83,29 +82,7 @@
   .header-text h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
   .header-text p { font-size: 12px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
 
-  .header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 
-  .auth-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    font-family: 'JetBrains Mono', monospace;
-    color: var(--text-dim);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 6px 12px;
-  }
-
-  .auth-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #666;
-  }
-
-  .auth-dot.connected { background: #4caf50; }
 
   .legend {
     display: flex;
@@ -192,18 +169,13 @@
   .btn-danger { background: var(--surface2); color: #f44336; border: 1px solid rgba(244,67,54,0.3); }
   .btn-danger:hover { background: rgba(244,67,54,0.1); }
 
-  .btn-google {
-    background: #4285f4;
-    color: white;
-    margin-left: auto;
-  }
-  .btn-google:hover { background: #3367d6; transform: translateY(-1px); }
+
 
   .btn-sheets { background: #1a7f3c; color: white; }
   .btn-sheets:hover { background: #22a34e; transform: translateY(-1px); }
   .btn-sheets:disabled { background: #1a3a28; color: #4a7a5a; cursor: not-allowed; transform: none; }
 
-  .btn-logout { background: var(--surface2); color: #f44336; border: 1px solid rgba(244,67,54,0.3); font-size: 12px; padding: 6px 12px; }
+
 
   .sheets-config {
     background: var(--surface);
@@ -357,7 +329,7 @@
     <div class="logo">KF</div>
     <div class="header-text">
       <h1>订单分流系统</h1>
-      <p>KIM FROZEN FOOD — ORDER SORTER v1.7</p>
+      <p>KIM FROZEN FOOD — ORDER SORTER v1.8</p>
     </div>
     <div class="header-right">
       <div class="auth-status">
@@ -385,6 +357,7 @@
       <button class="btn btn-danger" onclick="clearAll()">重置全部</button>
       <button class="btn btn-secondary" onclick="toggleConfig()">⚙ Sheet 设置</button>
       <button class="btn btn-sheets" id="sheetsBtn" onclick="exportToSheets()" disabled>↗ 写入 Google Sheets</button>
+      <button class="btn btn-secondary" id="openSheetBtn" onclick="openSheet()" style="display:none">📋 打开今日 Sheet</button>
     </div>
   </div>
 
@@ -392,12 +365,20 @@
     <div class="config-title">// GOOGLE SHEETS 配置</div>
     <div class="config-grid">
       <div class="config-field" style="grid-column: 1/-1">
-        <label>今日 SHEET ID（每天更新）</label>
-        <input type="text" id="sheetId" placeholder="粘贴今天的 Google Sheets ID">
+        <label>今日 SHEET 链接（每天更新，粘贴完整链接自动提取ID）</label>
+        <input type="text" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..." oninput="extractSheetId()">
+      </div>
+      <div class="config-field" style="grid-column: 1/-1">
+        <label>今日 SHEET ID（自动填入，也可手动填）</label>
+        <input type="text" id="sheetId" placeholder="自动从链接提取">
       </div>
       <div class="config-field" style="grid-column: 1/-1">
         <label>APPS SCRIPT URL（一次性设置，不需要每天更新）</label>
         <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/...">
+      </div>
+      <div class="config-field" style="grid-column: 1/-1">
+        <label>密码（防止他人写入，Apps Script也要设置同样密码）</label>
+        <input type="password" id="authPassword" placeholder="设置一个密码">
       </div>
       <div class="config-field"><label>A车 列号</label><input type="text" id="colA" value="B"></div>
       <div class="config-field"><label>B车 列号</label><input type="text" id="colB" value="E"></div>
@@ -427,19 +408,11 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// ── OAuth config ──────────────────────────────────────────────
-// Using a public OAuth client ID that works for installed apps
-// User needs to provide their own Client ID for production use
-const CLIENT_ID = ''; // Will be set by user
-const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
-
-let tokenClient = null;
-let accessToken = null;
-
 // ── State ─────────────────────────────────────────────────────
 const state = {
   vehicles: { A: [], B: [], C: [], D: [], E: [], F: [], G: [], JW: [] },
-  stats: { total: 0, newCount: 0, addCount: 0, splitCount: 0, cancelCount: 0 }
+  stats: { total: 0, newCount: 0, addCount: 0, splitCount: 0, cancelCount: 0 },
+  exported: false
 };
 
 let config = {
@@ -456,8 +429,10 @@ try {
 } catch(e) {}
 
 function loadConfigToUI() {
+  document.getElementById('sheetUrl').value = config.sheetUrl || '';
   document.getElementById('sheetId').value = config.sheetId || '';
   document.getElementById('scriptUrl').value = config.scriptUrl || '';
+  document.getElementById('authPassword').value = config.authPassword || '';
   document.getElementById('colA').value = config.cols?.A || 'B';
   document.getElementById('colB').value = config.cols?.B || 'E';
   document.getElementById('colC').value = config.cols?.C || 'H';
@@ -472,8 +447,10 @@ function loadConfigToUI() {
 loadConfigToUI();
 
 function saveConfig() {
+  config.sheetUrl = document.getElementById('sheetUrl').value.trim();
   config.sheetId = document.getElementById('sheetId').value.trim();
   config.scriptUrl = document.getElementById('scriptUrl').value.trim();
+  config.authPassword = document.getElementById('authPassword').value.trim();
   config.cols = {
     A: document.getElementById('colA').value.trim().toUpperCase(),
     B: document.getElementById('colB').value.trim().toUpperCase(),
@@ -492,65 +469,6 @@ function saveConfig() {
 
 function toggleConfig() {
   document.getElementById('sheetsConfig').classList.toggle('open');
-}
-
-// ── Google Auth ───────────────────────────────────────────────
-function initGoogleAuth() {
-  if (!config.clientId) return;
-  try {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: config.clientId,
-      scope: SCOPES,
-      callback: (resp) => {
-        if (resp.error) { showToast('登入失败: ' + resp.error, true); return; }
-        accessToken = resp.access_token;
-        setAuthState(true);
-        showToast('✓ 已登入 Google');
-      }
-    });
-  } catch(e) {
-    console.error('Auth init error:', e);
-  }
-}
-
-function handleLogin() {
-  const clientIdInput = prompt('请输入你的 Google OAuth Client ID：\n\n(在 Google Cloud Console → APIs & Services → Credentials → Create OAuth 2.0 Client ID)');
-  if (!clientIdInput) return;
-  config.clientId = clientIdInput.trim();
-  localStorage.setItem('kf_config_v2', JSON.stringify(config));
-  initGoogleAuth();
-  if (tokenClient) {
-    tokenClient.requestAccessToken();
-  } else {
-    showToast('初始化失败，请刷新页面后重试', true);
-  }
-}
-
-function handleLogout() {
-  if (accessToken) {
-    google.accounts.oauth2.revoke(accessToken);
-    accessToken = null;
-  }
-  setAuthState(false);
-  showToast('已登出');
-}
-
-function setAuthState(loggedIn) {
-  const dot = document.getElementById('authDot');
-  const label = document.getElementById('authLabel');
-  const loginBtn = document.getElementById('loginBtn');
-  const logoutBtn = document.getElementById('logoutBtn');
-  if (loggedIn) {
-    dot.classList.add('connected');
-    label.textContent = '已连接 Google';
-    loginBtn.style.display = 'none';
-    logoutBtn.style.display = 'flex';
-  } else {
-    dot.classList.remove('connected');
-    label.textContent = '未登入';
-    loginBtn.style.display = 'flex';
-    logoutBtn.style.display = 'none';
-  }
 }
 
 // ── Order Processing ──────────────────────────────────────────
@@ -720,9 +638,14 @@ function copyVehicle(vehicleKey) {
 function clearInput() { document.getElementById('inputArea').value = ''; }
 
 function clearAll() {
-  if (!confirm('确定要重置全部分流结果吗？')) return;
+  if (state.stats.total > 0 && !state.exported) {
+    if (!confirm('⚠️ 订单还没有写入 Google Sheets！确定要重置吗？')) return;
+  } else if (state.stats.total > 0) {
+    if (!confirm('确定要重置全部分流结果吗？')) return;
+  }
   state.vehicles = { A: [], B: [], C: [], D: [], E: [], F: [], G: [], JW: [] };
   state.stats = { total: 0, newCount: 0, addCount: 0, splitCount: 0, cancelCount: 0 };
+  state.exported = false;
   document.getElementById('inputArea').value = '';
   document.getElementById('statsBar').style.display = 'none';
   renderResults();
@@ -768,6 +691,22 @@ async function exportToSheets() {
   btn.textContent = '↗ 写入 Google Sheets';
 }
 
+function extractSheetId() {
+  const url = document.getElementById('sheetUrl').value.trim();
+  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (match) {
+    document.getElementById('sheetId').value = match[1];
+    // Show open sheet button
+    document.getElementById('openSheetBtn').style.display = 'flex';
+  }
+}
+
+function openSheet() {
+  const url = config.sheetUrl || (config.sheetId ? `https://docs.google.com/spreadsheets/d/${config.sheetId}` : '');
+  if (url) window.open(url, '_blank');
+  else showToast('请先填写 Sheet 链接', true);
+}
+
 function showToast(msg, isError = false) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
@@ -779,7 +718,9 @@ function showToast(msg, isError = false) {
 // Init
 window.onload = () => {
   renderResults();
-  if (config.clientId) initGoogleAuth();
+  if (config.sheetUrl) {
+    document.getElementById('openSheetBtn').style.display = 'flex';
+  }
 };
 </script>
 </body>
