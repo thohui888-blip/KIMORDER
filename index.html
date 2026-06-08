@@ -329,7 +329,7 @@
     <div class="logo">KF</div>
     <div class="header-text">
       <h1>订单分流系统</h1>
-      <p>KIM FROZEN FOOD — ORDER SORTER v2.1</p>
+      <p>KIM FROZEN FOOD — ORDER SORTER v2.2</p>
     </div>
 
   </div>
@@ -550,6 +550,7 @@ function processOrders() {
       pendingRename = null;
     } else if (isNewLine(trimmed)) {
       // This line starts with "New", save current store and wait for next store name
+      flushPendingNew();
       saveCurrentStore();
       currentStore = null;
       currentVehicle = null;
@@ -564,6 +565,12 @@ function processOrders() {
       pendingRename = trimmed;
     } else if (currentStore !== null) {
       currentItems.push(trimmed);
+    } else {
+      // No vehicle detected and no current store - treat as unknown store, go to JW
+      saveCurrentStore();
+      currentStore = trimmed + '（无车次）';
+      currentVehicle = 'JW';
+      currentItems = [];
     }
   }
   saveCurrentStore();
