@@ -329,7 +329,7 @@
     <div class="logo">KF</div>
     <div class="header-text">
       <h1>订单分流系统</h1>
-      <p>KIM FROZEN FOOD — ORDER SORTER v2.4</p>
+      <p>KIM FROZEN FOOD — ORDER SORTER v2.5</p>
     </div>
 
   </div>
@@ -482,10 +482,12 @@ function detectVehicle(line) {
   const m2 = t.match(/[(（【\[]\s*([A-Ga-g])\s*(?:车|car)?\s*[)）】\]]/i);
   if (m2) return m2[1].toUpperCase();
   // 3. Letter + 加/+ at end (with optional spaces) e.g. "8sam A 加" "店名D加"
-  const m3 = t.match(/([A-Ga-g])\s*[加\+]\s*$/i);
+  // Must have space before letter to avoid "20kg加"
+  const m3 = t.match(/\s([A-Ga-g])\s*[加\+]\s*$/i);
   if (m3) return m3[1].toUpperCase();
-  // 4. Letter at end with optional space e.g. "皇家E" "廷香哥罗面 D"
-  const m4 = t.match(/([A-Ga-g])\s*$/i);
+  // 4. Letter at end - must be preceded by space or be standalone
+  // Exclude cases like "20kg", "1ctn", "2箱" where letter is part of unit
+  const m4 = t.match(/(?<![0-9a-zA-Z])([A-Ga-g])\s*$/i);
   if (m4) return m4[1].toUpperCase();
   // 5. JW/walk-in
   if (/JW|walk.?in|自取|自己来|其他/i.test(t)) return 'JW';
@@ -735,12 +737,4 @@ function showToast(msg, isError = false) {
 }
 
 // Init
-window.onload = () => {
-  renderResults();
-  if (config.sheetUrl) {
-    document.getElementById('openSheetBtn').style.display = 'flex';
-  }
-};
-</script>
-</body>
-</html>
+window.onload = () =>
