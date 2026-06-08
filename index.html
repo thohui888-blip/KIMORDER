@@ -329,7 +329,7 @@
     <div class="logo">KF</div>
     <div class="header-text">
       <h1>订单分流系统</h1>
-      <p>KIM FROZEN FOOD — ORDER SORTER v2.3</p>
+      <p>KIM FROZEN FOOD — ORDER SORTER v2.4</p>
     </div>
 
   </div>
@@ -474,16 +474,21 @@ function detectFlag(storeName) {
 }
 
 function detectVehicle(line) {
-  // Match bracket formats: (A), （A）, (A车), （A车）etc.
-  const bracketMatch = line.match(/[([（【]\s*([A-Ga-g])\s*(?:车|car)?\s*[)\]）】]/i);
-  if (bracketMatch) return bracketMatch[1].toUpperCase();
-  // Match "X车" anywhere in line e.g. "Restaurant Chia ping D车"
-  const midCarMatch = line.match(/([A-Ga-g])车/i);
-  if (midCarMatch) return midCarMatch[1].toUpperCase();
-  // Match letter at end of line e.g. "廷香哥罗面 D"
-  const endMatch = line.match(/\s([A-Ga-g])\s*$/i);
-  if (endMatch) return endMatch[1].toUpperCase();
-  if (/JW|自取|自己来|其他/i.test(line)) return 'JW';
+  const t = line.trim();
+  // 1. X车 format
+  const m1 = t.match(/([A-Ga-g])车/i);
+  if (m1) return m1[1].toUpperCase();
+  // 2. Bracket format - anywhere in line
+  const m2 = t.match(/[(（【\[]\s*([A-Ga-g])\s*(?:车|car)?\s*[)）】\]]/i);
+  if (m2) return m2[1].toUpperCase();
+  // 3. Letter + 加/+ at end (with optional spaces) e.g. "8sam A 加" "店名D加"
+  const m3 = t.match(/([A-Ga-g])\s*[加\+]\s*$/i);
+  if (m3) return m3[1].toUpperCase();
+  // 4. Letter at end with optional space e.g. "皇家E" "廷香哥罗面 D"
+  const m4 = t.match(/([A-Ga-g])\s*$/i);
+  if (m4) return m4[1].toUpperCase();
+  // 5. JW/walk-in
+  if (/JW|walk.?in|自取|自己来|其他/i.test(t)) return 'JW';
   return null;
 }
 
