@@ -329,7 +329,7 @@
     <div class="logo">KF</div>
     <div class="header-text">
       <h1>订单分流系统</h1>
-      <p>KIM FROZEN FOOD — ORDER SORTER v1.8</p>
+      <p>KIM FROZEN FOOD — ORDER SORTER v2.1</p>
     </div>
 
   </div>
@@ -488,7 +488,7 @@ function detectVehicle(line) {
 }
 
 function isNewLine(line) {
-  return /^New\s+/i.test(line.trim());
+  return /^New[\s:：+]/i.test(line.trim());
 }
 
 function processOrders() {
@@ -512,6 +512,20 @@ function processOrders() {
       if (block.flag === 'cancel') state.stats.cancelCount++;
     }
   }
+  
+  function flushPendingNew() {
+    // If there is a pending New with no vehicle found, flush to JW
+    if (pendingNew) {
+      const newName = pendingNew.replace(/^new[\s:：+]*/i, '').trim();
+      const storeName = 'New（' + newName + '）（无车次，请确认）';
+      const block = { storeName, items: [...currentItems], flag: 'new' };
+      state.vehicles.JW.push(block);
+      state.stats.total++;
+      state.stats.newCount++;
+      pendingNew = null;
+      currentItems = [];
+    }
+  }
 
   let pendingNew = null; // holds "New Lim" waiting for next store
   let pendingRename = null; // holds "改名" line waiting for next store
@@ -525,7 +539,7 @@ function processOrders() {
       // Build store name with any pending prefixes
       let storeName = trimmed;
       if (pendingNew) {
-        const newName = pendingNew.replace(/^new\s*/i, '').trim();
+        const newName = pendingNew.replace(/^new[\s:：+]*/i, '').trim();
         storeName = 'New（' + newName + '）' + storeName;
         pendingNew = null;
       }
@@ -570,7 +584,7 @@ function renderResults() {
     { key: 'E', label: 'E 车', badgeClass: 'badge-e' },
     { key: 'F', label: 'F 车', badgeClass: 'badge-f' },
     { key: 'G', label: 'G 车', badgeClass: 'badge-g' },
-    { key: 'JW', label: 'JW / 其他', badgeClass: 'badge-jw' },
+    { key: 'JW', label: 'JW/BP+自来/其他', badgeClass: 'badge-jw' },
   ];
 
   grid.innerHTML = vehicles.map(v => {
