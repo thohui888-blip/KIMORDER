@@ -499,6 +499,9 @@ function detectVehicle(line) {
     if (!isQuantityAfter(afterBracket)) return m2[1].toUpperCase();
     // else: it's an item like "咸蛋黄(A) 30包", fall through
   }
+  // 2b. Bracket format for HUI → G
+  const mHui = t.match(/[(（【\[]\s*HUI\s*[)）】\]]/i);
+  if (mHui) return 'G';
   // 3. Letter + 加/加货/加单/+ at end e.g. "星星G加" "蓝天菜饭 B加货" "8sam A 加"
   const m3 = t.match(/(?<![0-9a-zA-Z])([A-Ga-g])\s*(?:加货|加单|加|\+)\s*$/i);
   if (m3) return m3[1].toUpperCase();
