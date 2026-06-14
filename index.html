@@ -514,6 +514,9 @@ function detectVehicle(line) {
   // 5b. Letter in middle followed by date e.g. "八星菜饭 B 18/04"
   const m5b = t.match(/(?<![0-9a-zA-Z])([A-Ga-g])\s+(?:[0-9]{1,2}\/[0-9]{1,2}|(?:星期|礼拜|周)[0-9一二三四五六日天]|[0-9]{1,2}(?:月|号|日))\s*$/i);
   if (m5b) return m5b[1].toUpperCase();
+  // 5c. Letter followed by payment remark at line end (no brackets)
+  const m5c = t.match(/(?<![0-9a-zA-Z])([A-Ga-g])\s*(?:转账|转帐|收[Cc]ash|[Cc]ash|[Bb]ank\s*[Tt]ransfer|银行转账|银行转帐|现金|收钱)\s*$/i);
+  if (m5c) return m5c[1].toUpperCase();
   // 6. JW/walk-in
   if (/JW|walk.?in|自取|自己来/i.test(t)) return 'JW';
   return null;
