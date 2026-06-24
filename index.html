@@ -273,6 +273,7 @@
   .badge-e { background: #c62828; }
   .badge-f { background: #4527a0; }
   .badge-g { background: #2e7d32; }
+  .badge-h { background: #ad1457; }
   .badge-jw { background: #37474f; }
 
   .card-title-text { font-size: 14px; font-weight: 600; }
@@ -329,7 +330,7 @@
     <div class="logo">KF</div>
     <div class="header-text">
       <h1>订单分流系统</h1>
-      <p>KIM FROZEN FOOD — ORDER SORTER v2.8</p>
+      <p>KIM FROZEN FOOD — ORDER SORTER v2.9</p>
     </div>
 
   </div>
@@ -380,7 +381,8 @@
       <div class="config-field"><label>E车 列号</label><input type="text" id="colE" value="N"></div>
       <div class="config-field"><label>F车 列号</label><input type="text" id="colF" value="Q"></div>
       <div class="config-field"><label>G车 列号</label><input type="text" id="colG" value="T"></div>
-      <div class="config-field"><label>JW/其他 列号</label><input type="text" id="colJW" value="W"></div>
+      <div class="config-field"><label>H/JW车 列号</label><input type="text" id="colH" value="W"></div>
+      <div class="config-field"><label>BP+自来/其他 列号</label><input type="text" id="colOTHER" value="Z"></div>
       <div class="config-field"><label>主Sheet名称</label><input type="text" id="sheetName" value="abcde"></div>
       <div class="config-field"><label>起始行</label><input type="number" id="startRow" value="2"></div>
     </div>
@@ -403,7 +405,7 @@
 <script>
 // ── State ─────────────────────────────────────────────────────
 const state = {
-  vehicles: { A: [], B: [], C: [], D: [], E: [], F: [], G: [], JW: [] },
+  vehicles: { A: [], B: [], C: [], D: [], E: [], F: [], G: [], H: [], OTHER: [] },
   stats: { total: 0, newCount: 0, addCount: 0, splitCount: 0, cancelCount: 0 },
   exported: false
 };
@@ -411,7 +413,7 @@ const state = {
 let config = {
   sheetId: '',
   clientId: '',
-  cols: { A: 'B', B: 'E', C: 'H', D: 'K', E: 'N', F: 'Q', G: 'T', JW: 'W' },
+  cols: { A: 'B', B: 'E', C: 'H', D: 'K', E: 'N', F: 'Q', G: 'T', H: 'W', OTHER: 'Z' },
   sheetName: 'abcde',
   startRow: 2
 };
@@ -433,7 +435,8 @@ function loadConfigToUI() {
   document.getElementById('colE').value = config.cols?.E || 'N';
   document.getElementById('colF').value = config.cols?.F || 'Q';
   document.getElementById('colG').value = config.cols?.G || 'T';
-  document.getElementById('colJW').value = config.cols?.JW || 'W';
+  document.getElementById('colH').value = config.cols?.H || 'W';
+  document.getElementById('colOTHER').value = config.cols?.OTHER || 'Z';
   document.getElementById('sheetName').value = config.sheetName || 'abcde';
   document.getElementById('startRow').value = config.startRow || 2;
 }
@@ -452,7 +455,8 @@ function saveConfig() {
     E: document.getElementById('colE').value.trim().toUpperCase(),
     F: document.getElementById('colF').value.trim().toUpperCase(),
     G: document.getElementById('colG').value.trim().toUpperCase(),
-    JW: document.getElementById('colJW').value.trim().toUpperCase(),
+    H: document.getElementById('colH').value.trim().toUpperCase(),
+    OTHER: document.getElementById('colOTHER').value.trim().toUpperCase(),
   };
   config.sheetName = document.getElementById('sheetName').value.trim();
   config.startRow = parseInt(document.getElementById('startRow').value) || 2;
@@ -466,7 +470,7 @@ function toggleConfig() {
 
 // ── Order Processing ──────────────────────────────────────────
 function detectFlag(storeName) {
-  if (/new\s*[\u4e00-\u9fff]|new\s+[a-z]/i.test(storeName)) return 'new';
+  if (/new\s*[一-鿿]|new\s+[a-z]/i.test(storeName)) return 'new';
   if (/加$|加货|加单/.test(storeName)) return 'add';
   if (/分单/.test(storeName)) return 'split';
   if (/取消|cancel/i.test(storeName)) return 'cancel';
@@ -490,10 +494,10 @@ function isQuantityAfter(text) {
 function detectVehicle(line) {
   const t = line.trim();
   // 1. X车 format
-  const m1 = t.match(/([A-Ga-g])车/i);
+  const m1 = t.match(/([A-Ha-h])车/i);
   if (m1) return m1[1].toUpperCase();
   // 2. Bracket format - anywhere in line, BUT if followed by quantity it's an item not a store
-  const m2 = t.match(/[(（【\[]\s*([A-Ga-g])\s*(?:车|car)?\s*[)）】\]]/i);
+  const m2 = t.match(/[(（【\[]\s*([A-Ha-h])\s*(?:车|car)?\s*[)）】\]]/i);
   if (m2) {
     const afterBracket = t.slice(t.indexOf(m2[0]) + m2[0].length);
     if (!isQuantityAfter(afterBracket)) return m2[1].toUpperCase();
@@ -503,22 +507,24 @@ function detectVehicle(line) {
   const mHui = t.match(/[(（【\[]\s*HUI\s*[)）】\]]/i);
   if (mHui) return 'G';
   // 3. Letter + 加/加货/加单/+ at end e.g. "星星G加" "蓝天菜饭 B加货" "8sam A 加"
-  const m3 = t.match(/(?<![0-9a-zA-Z])([A-Ga-g])\s*(?:加货|加单|加|\+)\s*$/i);
+  const m3 = t.match(/(?<![0-9a-zA-Z])([A-Ha-h])\s*(?:加货|加单|加|\+)\s*$/i);
   if (m3) return m3[1].toUpperCase();
   // 4. Letter at end e.g. "皇家E" "廷香哥罗面 D" - exclude "20kg" "1ctn"
-  const m4 = t.match(/(?<![0-9a-zA-Z])([A-Ga-g])\s*$/i);
+  const m4 = t.match(/(?<![0-9a-zA-Z])([A-Ha-h])\s*$/i);
   if (m4) return m4[1].toUpperCase();
   // 5. Letter in middle followed by bracket note e.g. "新加坡beletime E(收Cash)"
-  const m5 = t.match(/(?<![0-9a-zA-Z])([A-Ga-g])\s*[(（][^)）]*[)）]\s*$/i);
+  const m5 = t.match(/(?<![0-9a-zA-Z])([A-Ha-h])\s*[(（][^)）]*[)）]\s*$/i);
   if (m5) return m5[1].toUpperCase();
   // 5b. Letter in middle followed by date e.g. "八星菜饭 B 18/04"
-  const m5b = t.match(/(?<![0-9a-zA-Z])([A-Ga-g])\s+(?:[0-9]{1,2}\/[0-9]{1,2}|(?:星期|礼拜|周)[0-9一二三四五六日天]|[0-9]{1,2}(?:月|号|日))\s*$/i);
+  const m5b = t.match(/(?<![0-9a-zA-Z])([A-Ha-h])\s+(?:[0-9]{1,2}\/[0-9]{1,2}|(?:星期|礼拜|周)[0-9一二三四五六日天]|[0-9]{1,2}(?:月|号|日))\s*$/i);
   if (m5b) return m5b[1].toUpperCase();
   // 5c. Letter followed by payment remark at line end (no brackets)
-  const m5c = t.match(/(?<![0-9a-zA-Z])([A-Ga-g])\s*(?:转账|转帐|收[Cc]ash|[Cc]ash|[Bb]ank\s*[Tt]ransfer|银行转账|银行转帐|现金|收钱)\s*$/i);
+  const m5c = t.match(/(?<![0-9a-zA-Z])([A-Ha-h])\s*(?:转账|转帐|收[Cc]ash|[Cc]ash|[Bb]ank\s*[Tt]ransfer|银行转账|银行转帐|现金|收钱)\s*$/i);
   if (m5c) return m5c[1].toUpperCase();
-  // 6. JW/walk-in
-  if (/JW|walk.?in|自取|自己来/i.test(t)) return 'JW';
+  // 6. JW → H/JW车
+  if (/JW/i.test(t)) return 'H';
+  // 6b. 自来/walk-in/BP → BP+自来/其他
+  if (/walk.?in|自取|自己来|BP/i.test(t)) return 'OTHER';
   return null;
 }
 
@@ -539,7 +545,7 @@ function processOrders() {
     if (currentStore && currentVehicle) {
       const block = { storeName: currentStore, items: [...currentItems], flag: detectFlag(currentStore) };
       if (state.vehicles[currentVehicle]) state.vehicles[currentVehicle].push(block);
-      else state.vehicles.JW.push(block);
+      else state.vehicles.OTHER.push(block);
       state.stats.total++;
       if (block.flag === 'new') state.stats.newCount++;
       if (block.flag === 'add') state.stats.addCount++;
@@ -552,12 +558,12 @@ function processOrders() {
   let pendingRename = null; // holds "改名" line waiting for next store
 
   function flushPendingNew() {
-    // If there is a pending New with no vehicle found, flush to JW
+    // If there is a pending New with no vehicle found, flush to 其他
     if (pendingNew) {
       const newName = pendingNew.replace(/[\*＊]/g, '').replace(/^\s*new[\s:：+]*/i, '').trim();
       const storeName = 'New（' + newName + '）（无车次，请确认）';
       const block = { storeName, items: [...currentItems], flag: 'new' };
-      state.vehicles.JW.push(block);
+      state.vehicles.OTHER.push(block);
       state.stats.total++;
       state.stats.newCount++;
       pendingNew = null;
@@ -601,10 +607,10 @@ function processOrders() {
     } else if (currentStore !== null) {
       currentItems.push(trimmed);
     } else {
-      // No vehicle detected and no current store - treat as unknown store, go to JW
+      // No vehicle detected and no current store - treat as unknown store, go to 其他
       saveCurrentStore();
       currentStore = trimmed + '（无车次）';
-      currentVehicle = 'JW';
+      currentVehicle = 'OTHER';
       currentItems = [];
     }
   }
@@ -626,7 +632,8 @@ function renderResults() {
     { key: 'E', label: 'E 车', badgeClass: 'badge-e' },
     { key: 'F', label: 'F 车', badgeClass: 'badge-f' },
     { key: 'G', label: 'G 车', badgeClass: 'badge-g' },
-    { key: 'JW', label: 'JW/BP+自来/其他', badgeClass: 'badge-jw' },
+    { key: 'H', label: 'H/JW 车', badgeClass: 'badge-h', badge: 'H' },
+    { key: 'OTHER', label: 'BP+自来/其他', badgeClass: 'badge-jw', badge: '其他' },
   ];
 
   grid.innerHTML = vehicles.map(v => {
@@ -636,7 +643,7 @@ function renderResults() {
       <div class="vehicle-card ${hasContent ? 'has-content' : ''}">
         <div class="card-header">
           <div class="card-title">
-            <div class="vehicle-badge ${v.badgeClass}">${v.key}</div>
+            <div class="vehicle-badge ${v.badgeClass}" style="font-size:${(v.badge||v.key).length>1?'11px':'14px'}">${v.badge || v.key}</div>
             <span class="card-title-text">${v.label}</span>
             <span class="store-count">${orders.length} 店</span>
           </div>
@@ -692,7 +699,7 @@ function clearAll() {
   } else if (state.stats.total > 0) {
     if (!confirm('确定要重置全部分流结果吗？')) return;
   }
-  state.vehicles = { A: [], B: [], C: [], D: [], E: [], F: [], G: [], JW: [] };
+  state.vehicles = { A: [], B: [], C: [], D: [], E: [], F: [], G: [], H: [], OTHER: [] };
   state.stats = { total: 0, newCount: 0, addCount: 0, splitCount: 0, cancelCount: 0 };
   state.exported = false;
   document.getElementById('inputArea').value = '';
