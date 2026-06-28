@@ -493,6 +493,8 @@ function isQuantityAfter(text) {
 
 function detectVehicle(line) {
   const t = line.trim();
+  // 0. 尤经理 / (YU) 的单 → 强制归「其他」（最高优先，盖过车次）
+  if (/尤经理|[(（]\s*YU\s*[)）]/i.test(t)) return 'OTHER';
   // 1. X车 format
   const m1 = t.match(/([A-Ha-h])车/i);
   if (m1) return m1[1].toUpperCase();
