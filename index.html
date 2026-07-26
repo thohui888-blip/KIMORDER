@@ -293,7 +293,7 @@
   .order-block { margin-bottom: 12px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); animation: flowIn 0.3s ease forwards; }
   .order-block:last-child { margin-bottom: 0; }
 
-  .store-name { padding: 8px 12px; background: var(--surface2); font-size: 13px; font-weight: 600; line-height: 1.5; border-bottom: 1px solid var(--border); }
+  .store-name { padding: 8px 12px; background: var(--surface2); font-size: 13px; font-weight: 600; line-height: 1.5; border-bottom: 1px solid var(--border); white-space: pre-line; }
   .store-name.highlight-new { background: var(--new-bg); border-left: 3px solid var(--new-color); color: #90caf9; }
   .store-name.highlight-add { background: var(--add-bg); border-left: 3px solid var(--add-color); color: #ffcc80; }
   .store-name.highlight-split { background: var(--split-bg); border-left: 3px solid var(--split-color); color: #ffab91; }
@@ -548,10 +548,11 @@ function processOrders() {
   let currentStore = null;
   let currentVehicle = null;
   let currentItems = [];
+  let currentForcedFlag = null; // set when store came from a pendingNew merge, so it's always flagged 'new' regardless of what detectFlag's text-sniffing finds
 
   function saveCurrentStore() {
     if (currentStore && currentVehicle) {
-      const block = { storeName: currentStore, items: [...currentItems], flag: detectFlag(currentStore), seq: ++blockSeq };
+      const block = { storeName: currentStore, items: [...currentItems], flag: currentForcedFlag || detectFlag(currentStore), seq: ++blockSeq };
       if (state.vehicles[currentVehicle]) state.vehicles[currentVehicle].push(block);
       else state.vehicles.OTHER.push(block);
       state.stats.total++;
@@ -587,9 +588,11 @@ function processOrders() {
       saveCurrentStore();
       // Build store name with any pending prefixes
       let storeName = trimmed;
+      currentForcedFlag = null;
       if (pendingNew) {
         const newName = pendingNew.replace(/[\*＊]/g, '').replace(/^\s*new[\s:：+]*/i, '').trim();
-        storeName = 'New（' + newName + '）' + storeName;
+        storeName = 'New（' + newName + '）\n' + storeName; // own line, so long New+customer+store text doesn't run together
+        currentForcedFlag = 'new';
         pendingNew = null;
       }
       currentStore = storeName;
@@ -604,6 +607,7 @@ function processOrders() {
       currentStore = null;
       currentVehicle = null;
       currentItems = [];
+      currentForcedFlag = null;
       pendingNew = trimmed;
     } else if (/改名|换名|更名/.test(trimmed)) {
       // This line is a rename notice, save current store and wait for next store name
@@ -611,12 +615,14 @@ function processOrders() {
       currentStore = null;
       currentVehicle = null;
       currentItems = [];
+      currentForcedFlag = null;
       pendingRename = trimmed;
     } else if (currentStore !== null) {
       currentItems.push(trimmed);
     } else {
       // No vehicle detected and no current store - treat as unknown store, go to 其他
       saveCurrentStore();
+      currentForcedFlag = null;
       currentStore = trimmed + '（无车次）';
       currentVehicle = 'OTHER';
       currentItems = [];
