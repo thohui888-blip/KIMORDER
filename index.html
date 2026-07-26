@@ -121,7 +121,7 @@
 
   textarea {
     width: 100%;
-    min-height: 160px;
+    min-height: 360px;
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -301,6 +301,11 @@
   .order-items { padding: 8px 12px; background: var(--bg); }
   .order-item { font-size: 13px; line-height: 1.8; color: #c8c8d8; }
 
+  .block-actions { display: flex; gap: 6px; padding: 6px 12px; background: var(--bg); border-top: 1px solid var(--border); }
+  .block-btn { padding: 2px 8px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface2); color: var(--text-dim); cursor: pointer; font-size: 10px; font-family: 'JetBrains Mono', monospace; transition: all 0.2s; }
+  .block-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .block-btn.danger:hover { border-color: var(--cancel-color); color: var(--cancel-color); }
+
   .tag { display: inline-block; font-size: 10px; font-family: 'JetBrains Mono', monospace; padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle; font-weight: 700; }
   .tag-new { background: var(--new-bg); color: var(--new-color); border: 1px solid rgba(33,150,243,0.3); }
   .tag-add { background: var(--add-bg); color: var(--add-color); border: 1px solid rgba(255,152,0,0.3); }
@@ -330,7 +335,7 @@
     <div class="logo">KF</div>
     <div class="header-text">
       <h1>订单分流系统</h1>
-      <p>KIM FROZEN FOOD — ORDER SORTER v2.9</p>
+      <p>KIM FROZEN FOOD — ORDER SORTER v3.0</p>
     </div>
 
   </div>
@@ -370,10 +375,6 @@
         <label>APPS SCRIPT URL（一次性设置，不需要每天更新）</label>
         <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/...">
       </div>
-      <div class="config-field" style="grid-column: 1/-1">
-        <label>密码（防止他人写入，Apps Script也要设置同样密码）</label>
-        <input type="password" id="authPassword" placeholder="设置一个密码">
-      </div>
       <div class="config-field"><label>A车 列号</label><input type="text" id="colA" value="B"></div>
       <div class="config-field"><label>B车 列号</label><input type="text" id="colB" value="E"></div>
       <div class="config-field"><label>C车 列号</label><input type="text" id="colC" value="H"></div>
@@ -409,6 +410,7 @@ const state = {
   stats: { total: 0, newCount: 0, addCount: 0, splitCount: 0, cancelCount: 0 },
   exported: false
 };
+let blockSeq = 0; // monotonic id, tracks paste order across all vehicles so "合并到上一单" knows what "previous" means
 
 let config = {
   sheetId: '',
@@ -427,7 +429,6 @@ function loadConfigToUI() {
   document.getElementById('sheetUrl').value = config.sheetUrl || '';
   document.getElementById('sheetId').value = config.sheetId || '';
   document.getElementById('scriptUrl').value = config.scriptUrl || '';
-  document.getElementById('authPassword').value = config.authPassword || '';
   document.getElementById('colA').value = config.cols?.A || 'B';
   document.getElementById('colB').value = config.cols?.B || 'E';
   document.getElementById('colC').value = config.cols?.C || 'H';
@@ -446,7 +447,6 @@ function saveConfig() {
   config.sheetUrl = document.getElementById('sheetUrl').value.trim();
   config.sheetId = document.getElementById('sheetId').value.trim();
   config.scriptUrl = document.getElementById('scriptUrl').value.trim();
-  config.authPassword = document.getElementById('authPassword').value.trim();
   config.cols = {
     A: document.getElementById('colA').value.trim().toUpperCase(),
     B: document.getElementById('colB').value.trim().toUpperCase(),
@@ -509,11 +509,14 @@ function detectVehicle(line) {
   const mHui = t.match(/[(（【\[]\s*HUI\s*[)）】\]]/i);
   if (mHui) return 'G';
   // 3. Letter + 加/加货/加单/+ at end e.g. "星星G加" "蓝天菜饭 B加货" "8sam A 加"
-  const m3 = t.match(/(?<![0-9a-zA-Z])([A-Ha-h])\s*(?:加货|加单|加|\+)\s*$/i);
+  const m3 = t.match(/(?<![0-9a-zA-Z])([A-Ha-h])\s*(?:加货|加单|加|分单|\+)\s*$/i);
   if (m3) return m3[1].toUpperCase();
   // 4. Letter at end e.g. "皇家E" "廷香哥罗面 D" - exclude "20kg" "1ctn"
-  const m4 = t.match(/(?<![0-9a-zA-Z])([A-Ha-h])\s*$/i);
-  if (m4) return m4[1].toUpperCase();
+  // also exclude "kg" split by a stray space e.g. "4k g" (still a unit, not vehicle G)
+  if (!/[0-9]\s*[kK]\s*[gG]\s*$/.test(t)) {
+    const m4 = t.match(/(?<![0-9a-zA-Z])([A-Ha-h])\s*$/i);
+    if (m4) return m4[1].toUpperCase();
+  }
   // 5. Letter in middle followed by bracket note e.g. "新加坡beletime E(收Cash)"
   const m5 = t.match(/(?<![0-9a-zA-Z])([A-Ha-h])\s*[(（][^)）]*[)）]\s*$/i);
   if (m5) return m5[1].toUpperCase();
@@ -545,7 +548,7 @@ function processOrders() {
 
   function saveCurrentStore() {
     if (currentStore && currentVehicle) {
-      const block = { storeName: currentStore, items: [...currentItems], flag: detectFlag(currentStore) };
+      const block = { storeName: currentStore, items: [...currentItems], flag: detectFlag(currentStore), seq: ++blockSeq };
       if (state.vehicles[currentVehicle]) state.vehicles[currentVehicle].push(block);
       else state.vehicles.OTHER.push(block);
       state.stats.total++;
@@ -564,7 +567,7 @@ function processOrders() {
     if (pendingNew) {
       const newName = pendingNew.replace(/[\*＊]/g, '').replace(/^\s*new[\s:：+]*/i, '').trim();
       const storeName = 'New（' + newName + '）（无车次，请确认）';
-      const block = { storeName, items: [...currentItems], flag: 'new' };
+      const block = { storeName, items: [...currentItems], flag: 'new', seq: ++blockSeq };
       state.vehicles.OTHER.push(block);
       state.stats.total++;
       state.stats.newCount++;
@@ -618,6 +621,7 @@ function processOrders() {
   }
   saveCurrentStore();
 
+  state.exported = false;
   document.getElementById('inputArea').value = '';
   renderResults();
   updateStats();
@@ -668,7 +672,66 @@ function renderOrderBlock(order) {
     <div class="order-block">
       <div class="store-name ${flagClass}">${escapeHtml(order.storeName)}${tag}</div>
       ${order.items.length > 0 ? `<div class="order-items">${order.items.map(i => `<div class="order-item">${escapeHtml(i)}</div>`).join('')}</div>` : ''}
+      <div class="block-actions">
+        <button class="block-btn" onclick="mergeBlockUp(${order.seq})">↑ 合并到上一单</button>
+        <button class="block-btn danger" onclick="deleteBlock(${order.seq})">✕ 删除</button>
+      </div>
     </div>`;
+}
+
+function findBlockLocation(seq) {
+  for (const vKey in state.vehicles) {
+    const idx = state.vehicles[vKey].findIndex(o => o.seq === seq);
+    if (idx !== -1) return { vKey, idx };
+  }
+  return null;
+}
+
+function findPreviousBlock(seq) {
+  let best = null;
+  for (const vKey in state.vehicles) {
+    state.vehicles[vKey].forEach((o, idx) => {
+      if (o.seq < seq && (!best || o.seq > best.block.seq)) best = { vKey, idx, block: o };
+    });
+  }
+  return best;
+}
+
+function removeBlockStats(block) {
+  state.stats.total--;
+  if (block.flag === 'new') state.stats.newCount--;
+  if (block.flag === 'add') state.stats.addCount--;
+  if (block.flag === 'split') state.stats.splitCount--;
+  if (block.flag === 'cancel') state.stats.cancelCount--;
+}
+
+function mergeBlockUp(seq) {
+  const loc = findBlockLocation(seq);
+  if (!loc) return;
+  const block = state.vehicles[loc.vKey][loc.idx];
+  const prev = findPreviousBlock(seq);
+  if (!prev) { showToast('这是第一单，没有上一单可合并', true); return; }
+  if (!confirm(`确定要把「${block.storeName}」合并到上一单「${prev.block.storeName}」吗？`)) return;
+  prev.block.items.push(block.storeName, ...block.items);
+  removeBlockStats(block);
+  state.vehicles[loc.vKey].splice(loc.idx, 1);
+  state.exported = false;
+  renderResults();
+  updateStats();
+  showToast('✓ 已合并');
+}
+
+function deleteBlock(seq) {
+  const loc = findBlockLocation(seq);
+  if (!loc) return;
+  const block = state.vehicles[loc.vKey][loc.idx];
+  if (!confirm(`确定要删除「${block.storeName}」吗？此操作无法撤销`)) return;
+  removeBlockStats(block);
+  state.vehicles[loc.vKey].splice(loc.idx, 1);
+  state.exported = false;
+  renderResults();
+  updateStats();
+  showToast('✓ 已删除');
 }
 
 function escapeHtml(t) {
@@ -704,6 +767,7 @@ function clearAll() {
   state.vehicles = { A: [], B: [], C: [], D: [], E: [], F: [], G: [], H: [], OTHER: [] };
   state.stats = { total: 0, newCount: 0, addCount: 0, splitCount: 0, cancelCount: 0 };
   state.exported = false;
+  blockSeq = 0;
   document.getElementById('inputArea').value = '';
   document.getElementById('statsBar').style.display = 'none';
   renderResults();
@@ -735,12 +799,16 @@ async function exportToSheets() {
 
     const res = await fetch(config.scriptUrl, {
       method: 'POST',
-      mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(payload)
     });
-    // no-cors mode returns opaque response, assume success if no error thrown
-    showToast('✓ 已成功写入 Google Sheets！');
+    const result = await res.json();
+    if (result.status === 'ok') {
+      state.exported = true;
+      showToast('✓ 已成功写入 Google Sheets！');
+    } else {
+      showToast('写入失败：' + (result.message || '未知错误'), true);
+    }
   } catch(e) {
     showToast('写入失败：' + e.message, true);
   }
