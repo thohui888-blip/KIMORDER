@@ -495,9 +495,13 @@ function isQuantityAfter(text) {
 
 function detectVehicle(line) {
   const t = line.trim();
-  // 0. 尤经理/尤总/YU 是「其他」车的别名，跟 H=JW 一个道理（最高优先，盖过字母车次）
-  // \bYU\b 只匹配独立出现的 YU，避免误伤 Yusof / Yunus 这类名字里带 yu 的情况
-  if (/尤经理|尤总|[(（]\s*YU\s*[)）]|\bYU\b/i.test(t)) return 'OTHER';
+  // 0. 尤经理/尤总/YU 是「其他」车的别名，判定方式跟字母车次一样：
+  //    带括号的写法（如"(尤经理)"）在行内任何位置都算，就像 (A) 那样；
+  //    裸写（不带括号）只有出现在结尾（车次该出现的位置）才算，前面只是说明谁转的单，不影响车次
+  //    \bYU\b 只匹配独立出现的 YU，避免误伤 Yusof / Yunus 这类名字里带 yu 的情况
+  if (/[(（]\s*(?:尤经理|尤总|YU)\s*[)）]/i.test(t)) return 'OTHER';
+  if (/(?:尤经理|尤总)\s*$/i.test(t)) return 'OTHER';
+  if (/\bYU\b\s*$/i.test(t)) return 'OTHER';
   // 1. X车 format
   const m1 = t.match(/([A-Ha-h])车/i);
   if (m1) return m1[1].toUpperCase();
