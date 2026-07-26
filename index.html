@@ -217,6 +217,7 @@
     transition: border-color 0.2s;
   }
   .config-field input:focus { border-color: var(--accent); }
+  .sheet-name-hint { font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); min-height: 16px; }
 
   .stats-bar {
     display: flex;
@@ -366,10 +367,11 @@
       <div class="config-field" style="grid-column: 1/-1">
         <label>今日 SHEET 链接（每天更新，粘贴完整链接自动提取ID）</label>
         <input type="text" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..." oninput="extractSheetId()">
+        <span class="sheet-name-hint" id="sheetNameHint"></span>
       </div>
       <div class="config-field" style="grid-column: 1/-1">
         <label>今日 SHEET ID（自动填入，也可手动填）</label>
-        <input type="text" id="sheetId" placeholder="自动从链接提取">
+        <input type="text" id="sheetId" placeholder="自动从链接提取" oninput="fetchSheetName(this.value.trim())">
       </div>
       <div class="config-field" style="grid-column: 1/-1">
         <label>APPS SCRIPT URL（一次性设置，不需要每天更新）</label>
@@ -824,6 +826,37 @@ function extractSheetId() {
     document.getElementById('sheetId').value = match[1];
     // Show open sheet button
     document.getElementById('openSheetBtn').style.display = 'flex';
+    fetchSheetName(match[1]);
+  } else {
+    document.getElementById('sheetNameHint').textContent = '';
+  }
+}
+
+let sheetNameRequestId = 0;
+async function fetchSheetName(sheetId) {
+  const hint = document.getElementById('sheetNameHint');
+  const scriptUrl = (document.getElementById('scriptUrl').value || config.scriptUrl || '').trim();
+  if (!sheetId) { hint.textContent = ''; return; }
+  if (!scriptUrl) { hint.textContent = '（填好 Apps Script URL 才能自动查表格名）'; hint.style.color = 'var(--text-dim)'; return; }
+
+  const requestId = ++sheetNameRequestId;
+  hint.textContent = '查询中...';
+  hint.style.color = 'var(--text-dim)';
+  try {
+    const res = await fetch(scriptUrl + '?sheetId=' + encodeURIComponent(sheetId));
+    const data = await res.json();
+    if (requestId !== sheetNameRequestId) return; // a newer request superseded this one
+    if (data.status === 'ok' && data.name) {
+      hint.textContent = '✓ ' + data.name;
+      hint.style.color = 'var(--accent)';
+    } else {
+      hint.textContent = '✕ ' + (data.message || '无法读取此表格，检查链接或分享权限');
+      hint.style.color = 'var(--cancel-color)';
+    }
+  } catch(e) {
+    if (requestId !== sheetNameRequestId) return;
+    hint.textContent = '✕ 查询失败：' + e.message;
+    hint.style.color = 'var(--cancel-color)';
   }
 }
 
@@ -846,6 +879,9 @@ window.onload = () => {
   renderResults();
   if (config.sheetUrl) {
     document.getElementById('openSheetBtn').style.display = 'flex';
+  }
+  if (config.sheetId) {
+    fetchSheetName(config.sheetId);
   }
 };
 </script>
