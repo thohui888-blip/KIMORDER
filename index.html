@@ -622,6 +622,7 @@ function processOrders() {
       currentItems = [];
     }
   }
+  flushPendingNew(); // catches a "New XX" that was the very last line with no vehicle line after it
   saveCurrentStore();
 
   state.exported = false;
